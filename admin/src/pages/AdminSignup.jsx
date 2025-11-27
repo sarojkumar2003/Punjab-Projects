@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import AdminAuthLayout from "../components/AdminAuthLayout";
 
-const API = "http://localhost:5000/api/auth/admin/register";
+const API = import.meta.env.VITE_API_BASE + "/api/auth/admin/register" || "http://localhost:5000/api/auth/admin/register";
 
 const AdminSignup = () => {
   const [name, setName] = useState("");
