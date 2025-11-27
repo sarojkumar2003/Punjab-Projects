@@ -32,7 +32,7 @@ app.use(cookieParser());
 const allowedOrigins = [
   'http://localhost:5173',
   'https://punjab-admin.onrender.com',
-  'https://punjab-commute.onrender.com'
+  
 ];
 
 app.use((req, res, next) => {
