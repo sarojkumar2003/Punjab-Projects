@@ -1,20 +1,23 @@
 // src/App.jsx
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import AdminLogin from "./pages/AdminLogin";
 import AdminSignup from "./pages/AdminSignup";
 import AdminDashboard from "./pages/AdminDashboard";
 import ManageBuses from "./pages/ManageBuses";
 import ManageRoutes from "./pages/ManageRoutes";
 import AdminUsers from "./pages/AdminUsers";
-import RouteDetails from "./pages/RouteDetails";   // ⬅️ add this
+import RouteDetails from "./pages/RouteDetails";
 import ProtectedAdminRoute from "./components/ProtectedAdminRoute";
 import AdminDrivers from "./pages/AdminDrivers";
-import LiveRoutes from "./pages/LiveRoutes"; // ⬅️ add this
+import LiveRoutes from "./pages/LiveRoutes";
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Root: redirect to admin login (change target if you want a public home) */}
+        <Route path="/" element={<Navigate to="/admin/login" replace />} />
+
         {/* Auth */}
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin/signup" element={<AdminSignup />} />
@@ -80,6 +83,9 @@ function App() {
             </ProtectedAdminRoute>
           }
         />
+
+        {/* Fallback — unknown routes */}
+        <Route path="*" element={<Navigate to="/admin/login" replace />} />
       </Routes>
     </BrowserRouter>
   );
