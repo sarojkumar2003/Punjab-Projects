@@ -25,7 +25,8 @@ const app = express();
 // Middleware to handle CORS (Cross-Origin Resource Sharing)
 app.use(
   cors({
-    origin: 'http://localhost:5173', // your React app URL
+    // origin: 'http://localhost:5173', // your React app URL
+    origin: 'https://punjab-admin.onrender.com', // your React app URL
     credentials: true,               // allow cookies & credentials
   })
 );
