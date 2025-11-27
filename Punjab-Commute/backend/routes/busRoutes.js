@@ -1,3 +1,4 @@
+// routes/busRoutes.js
 const express = require('express');
 const router = express.Router();
 const {
@@ -5,8 +6,8 @@ const {
   getAllBuses,
   getBusById,
   updateBusLocation,
-  updateBusStatus, // optional
-  deleteBus        // optional
+  updateBusStatus,
+  deleteBus,
 } = require('../controllers/busController');
 
 router.get('/', getAllBuses);
@@ -15,11 +16,13 @@ router.get('/:id', getBusById);
 // CREATE
 router.post('/', createBus);
 
-// UPDATE location
+// LIVE UPDATE: location
 router.put('/:id', updateBusLocation);
 
-// Optional convenience routes
+// STATUS UPDATE
 router.patch('/:id/status', updateBusStatus);
+
+// DELETE
 router.delete('/:id', deleteBus);
 
 module.exports = router;

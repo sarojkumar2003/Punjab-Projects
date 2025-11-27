@@ -1,89 +1,137 @@
-const Bus = require('../models/busModel');  // Import the Bus model
+// services/gpsService.js  (or src/services/gpsService.js)
+// Adjust path based on your folder structure
+
+const Bus = require('../models/busModel');
 
 /**
- * Service to update the bus location.
- * @param {String} busId - The ID of the bus whose location is being updated.
- * @param {Object} location - The new location of the bus (latitude, longitude).
+ * Update a bus's live location and optional telemetry data.
+ *
+ * @param {String} busId
+ * @param {Object} payload
+ * @param {Number} payload.latitude
+ * @param {Number} payload.longitude
+ * @param {Number} [payload.speed]          - optional, in km/h
+ * @param {Boolean} [payload.emergency]     - optional
+ * @param {String} [payload.issueNote]      - optional
+ * @param {String} [payload.lastStopName]   - optional
+ * @param {Date|String} [payload.lastStopTime] - optional
+ *
+ * @returns {Promise<Bus>} updated bus
  */
-const updateBusLocation = async (busId, location) => {
-  try {
-    // Validate incoming location data
-    if (!location || !location.latitude || !location.longitude) {
-      throw new Error('Invalid location data');
-    }
+const updateBusLocation = async (busId, payload) => {
+  const {
+    latitude,
+    longitude,
+    speed,
+    emergency,
+    issueNote,
+    lastStopName,
+    lastStopTime,
+  } = payload || {};
 
-    // Update the bus location in the database
-    const updatedBus = await Bus.findByIdAndUpdate(
-      busId,  // Find bus by its ID
-      { currentLocation: { type: 'Point', coordinates: [location.longitude, location.latitude] } },
-      { new: true }  // Return the updated document
-    );
-
-    if (!updatedBus) {
-      throw new Error('Bus not found');
-    }
-
-    // Return the updated bus data (location)
-    return updatedBus;
-  } catch (error) {
-    console.error('Error updating bus location:', error);
-    throw error;  // Propagate error for further handling
+  if (
+    typeof latitude !== 'number' ||
+    typeof longitude !== 'number' ||
+    Number.isNaN(latitude) ||
+    Number.isNaN(longitude)
+  ) {
+    throw new Error('Latitude and longitude must be numbers');
   }
+
+  if (longitude < -180 || longitude > 180 || latitude < -90 || latitude > 90) {
+    throw new Error('Latitude/longitude out of range');
+  }
+
+  const update = {
+    currentLocation: {
+      type: 'Point',
+      coordinates: [longitude, latitude], // [lng, lat]
+    },
+    lastUpdated: new Date(),
+  };
+
+  if (typeof speed === 'number' && !Number.isNaN(speed)) {
+    update.speed = speed;
+  }
+
+  if (typeof emergency === 'boolean') {
+    update.emergency = emergency;
+  }
+
+  if (typeof issueNote === 'string') {
+    update.issueNote = issueNote;
+  }
+
+  if (typeof lastStopName === 'string') {
+    update.lastStopName = lastStopName;
+  }
+
+  if (lastStopTime) {
+    update.lastStopTime = new Date(lastStopTime);
+  }
+
+  const updatedBus = await Bus.findByIdAndUpdate(
+    busId,
+    { $set: update },
+    { new: true }
+  )
+    .populate('route')
+    .populate('driver');
+
+  return updatedBus;
 };
 
 /**
- * Service to get the current location of a bus.
- * @param {String} busId - The ID of the bus whose location is being fetched.
- * @returns {Object} - The bus's current location and status.
+ * Get the current location of a bus.
+ * @param {String} busId
  */
 const getBusLocation = async (busId) => {
-  try {
-    // Fetch the bus from the database
-    const bus = await Bus.findById(busId);
+  const bus = await Bus.findById(busId).select(
+    'busNumber currentLocation lastUpdated status route driverName driverPhone'
+  ).populate('route');
 
-    if (!bus) {
-      throw new Error('Bus not found');
-    }
-
-    // Return the bus location and other relevant data
-    return {
-      busId: bus._id,
-      location: bus.currentLocation,
-      status: bus.status,
-      lastUpdated: bus.lastUpdated,
-    };
-  } catch (error) {
-    console.error('Error fetching bus location:', error);
-    throw error;
+  if (!bus) {
+    throw new Error('Bus not found');
   }
+
+  return bus;
 };
 
 /**
- * Service to get the nearby buses based on a user's location.
- * @param {Object} userLocation - The user's location (latitude, longitude).
- * @param {Number} radius - The radius (in meters) to search for nearby buses.
- * @returns {Array} - A list of nearby buses within the given radius.
+ * Find buses near a given point.
+ *
+ * @param {Object} params
+ * @param {Number} params.latitude
+ * @param {Number} params.longitude
+ * @param {Number} [params.maxDistanceMeters=3000]
  */
-const getNearbyBuses = async (userLocation, radius = 1000) => {
-  try {
-    // Find nearby buses within the specified radius
-    const nearbyBuses = await Bus.find({
-      currentLocation: {
-        $near: {
-          $geometry: {
-            type: 'Point',
-            coordinates: [userLocation.longitude, userLocation.latitude],
-          },
-          $maxDistance: radius,  // Radius in meters
-        },
-      },
-    });
-
-    return nearbyBuses;
-  } catch (error) {
-    console.error('Error fetching nearby buses:', error);
-    throw error;
+const getNearbyBuses = async ({ latitude, longitude, maxDistanceMeters = 3000 }) => {
+  if (
+    typeof latitude !== 'number' ||
+    typeof longitude !== 'number' ||
+    Number.isNaN(latitude) ||
+    Number.isNaN(longitude)
+  ) {
+    throw new Error('Latitude and longitude must be numbers');
   }
+
+  const nearbyBuses = await Bus.find({
+    currentLocation: {
+      $near: {
+        $geometry: {
+          type: 'Point',
+          coordinates: [longitude, latitude],
+        },
+        $maxDistance: maxDistanceMeters,
+      },
+    },
+  })
+    .select(
+      'busNumber currentLocation status driverName driverPhone route lastUpdated'
+    )
+    .populate('route');
+
+  return nearbyBuses;
 };
 
 module.exports = {

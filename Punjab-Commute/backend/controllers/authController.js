@@ -1,95 +1,193 @@
+// controllers/authController.js
 const User = require('../models/userModel');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const dotenv = require('dotenv');
 
-dotenv.config(); // Load environment variables from .env
+dotenv.config();
 
-// Register a new user
+// Helper to generate JWT
+const generateToken = (user) => {
+  return jwt.sign(
+    { id: user._id, role: user.role },
+    process.env.JWT_SECRET || 'devsecret',
+    { expiresIn: process.env.JWT_EXPIRATION || '1h' }
+  );
+};
+
+// =============== NORMAL USER REGISTER (commuter) =================
 const registerUser = async (req, res) => {
   const { name, email, password, role } = req.body;
-  
+
   try {
-    // Validate email format using regular expression
     const emailRegex = /^\S+@\S+\.\S+$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({ message: 'Invalid email format' });
     }
 
-    // Check if the user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).json({ message: 'User already exists' });
+      return res
+        .status(400)
+        .json({ message: 'User already exists with this email' });
     }
 
-    // Hash the password before saving it
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    // Create a new user
+    // userModel pre-save hook will hash password
     const newUser = new User({
       name,
       email,
-      password: hashedPassword, // Save hashed password
-      role: role || 'commuter',  // Default to commuter if no role is provided
+      password,
+      role: role || 'commuter',
     });
 
     await newUser.save();
-    res.status(201).json({ message: 'User registered successfully' });
+
+    return res.status(201).json({ message: 'User registered successfully' });
   } catch (error) {
     console.error('Error registering user:', error);
-    res.status(500).json({ message: 'Server Error', error });
+    return res.status(500).json({ message: 'Server Error', error });
   }
 };
 
-// Login a user
+// =============== ADMIN REGISTER (with personal adminKey) ==========
+const registerAdmin = async (req, res) => {
+  const { name, email, password, adminKey } = req.body;
+
+  try {
+    if (!adminKey || adminKey.length < 4) {
+      return res
+        .status(400)
+        .json({ message: 'Admin secret key must be at least 4 characters' });
+    }
+
+    const emailRegex = /^\S+@\S+\.\S+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: 'Invalid email format' });
+    }
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res
+        .status(400)
+        .json({ message: 'User already exists with this email' });
+    }
+
+    // Create admin, password will be hashed by pre-save
+    const newAdmin = new User({
+      name,
+      email,
+      password,
+      role: 'admin',
+    });
+
+    // Set personal admin secret key (hash)
+    await newAdmin.setAdminKey(adminKey);
+
+    await newAdmin.save();
+
+    return res.status(201).json({ message: 'Admin registered successfully' });
+  } catch (error) {
+    console.error('Error registering admin:', error);
+    return res.status(500).json({ message: 'Server Error', error });
+  }
+};
+
+// =============== NORMAL USER LOGIN (commuter) =====================
 const loginUser = async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    // Check if the user exists
     const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(400).json({ message: 'User not found' });
+
+    if (!user || user.role !== 'commuter') {
+      return res.status(400).json({ message: 'Commuter account not found' });
     }
 
-    // Compare the provided password with the stored hashed password
-    const isMatch = await bcrypt.compare(password, user.password);
+    const isMatch = await user.matchPassword(password);
     if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid credentials' });
+      return res.status(400).json({ message: 'Incorrect password' });
     }
 
-    // Generate a JWT token
-    const token = jwt.sign(
-      { id: user._id, role: user.role },  // Payload: user ID and role
-      process.env.JWT_SECRET,  // JWT secret from environment variable
-      { expiresIn: process.env.JWT_EXPIRATION || '1h' }  // JWT expiration time (1 hour by default)
-    );
+    const token = generateToken(user);
 
-    // Store token in cookies
     res.cookie('authToken', token, {
-      httpOnly: true,  // Ensures the cookie is only accessible by the server
-      secure: process.env.NODE_ENV === 'production',  // Set to true for HTTPS in production
-      maxAge: 3600000,  // Token expires in 1 hour
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 3600000,
       sameSite: 'strict',
     });
 
-    res.status(200).json({ message: 'Login successful', token });
+    return res.status(200).json({
+      message: 'Commuter login successful',
+      token,
+      role: user.role,
+    });
   } catch (error) {
-    console.error('Error logging in user:', error);
-    res.status(500).json({ message: 'Server Error', error });
+    console.error('Error logging in commuter:', error);
+    return res.status(500).json({ message: 'Server Error', error });
   }
 };
 
-// Logout user (clear cookie)
+// =============== ADMIN LOGIN (email + password + adminKey) ========
+const loginAdmin = async (req, res) => {
+  const { email, password, adminKey } = req.body;
+
+  try {
+    // 1. Find admin user
+    const user = await User.findOne({ email });
+
+    if (!user || user.role !== 'admin') {
+      return res.status(400).json({ message: 'Admin account not found' });
+    }
+
+    // 2. Check password
+    const isMatch = await user.matchPassword(password);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Incorrect password' });
+    }
+
+    // 3. Check admin personal secret key
+    const keyMatch = await user.checkAdminKey(adminKey);
+    if (!keyMatch) {
+      return res.status(401).json({ message: 'Invalid admin secret key' });
+    }
+
+    // 4. Generate token
+    const token = generateToken(user);
+
+    res.cookie('authToken', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 3600000,
+      sameSite: 'strict',
+    });
+
+    return res.status(200).json({
+      message: 'Admin login successful',
+      token,
+      role: user.role,
+    });
+  } catch (error) {
+    console.error('Error logging in admin:', error);
+    return res.status(500).json({ message: 'Server Error', error });
+  }
+};
+
+// =============== LOGOUT ===========================================
 const logoutUser = (req, res) => {
   try {
-    res.clearCookie('authToken');  // Clear the authToken cookie
-    res.status(200).json({ message: 'Logged out successfully' });
+    res.clearCookie('authToken');
+    return res.status(200).json({ message: 'Logged out successfully' });
   } catch (error) {
     console.error('Error logging out user:', error);
-    res.status(500).json({ message: 'Server Error', error });
+    return res.status(500).json({ message: 'Server Error', error });
   }
 };
 
-module.exports = { registerUser, loginUser, logoutUser };
+module.exports = {
+  registerUser,
+  registerAdmin,
+  loginUser,
+  loginAdmin,
+  logoutUser,
+};

@@ -1,14 +1,23 @@
+// routes/routeRoutes.js
 const express = require('express');
 const router = express.Router();
-const { getAllRoutes, getRouteById, createRoute } = require('../controllers/routeController');
+const {
+  getAllRoutes,
+  getRouteById,
+  createRoute,
+  updateRoute,
+  deleteRoute,
+} = require('../controllers/routeController');
 
-// Get all routes
+const { protect, adminOnly } = require('../middleware/authMiddleware');
+
+// Public
 router.get('/', getAllRoutes);
-
-// Get a specific route by ID
 router.get('/:id', getRouteById);
 
-// Create a new route
-router.post('/', createRoute);
+// Admin-only modifications
+router.post('/', protect, adminOnly, createRoute);
+router.put('/:id', protect, adminOnly, updateRoute);
+router.delete('/:id', protect, adminOnly, deleteRoute);
 
 module.exports = router;

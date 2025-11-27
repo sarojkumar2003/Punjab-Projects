@@ -1,0 +1,7 @@
+@import "tailwindcss";
+
+.leaflet-container {
+  width: 100%;
+  height: 400px; /* or whatever height you like */
+  border-radius: 0.75rem;
+}
