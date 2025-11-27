@@ -7,10 +7,7 @@ const connectDB = async () => {
     const dbURI = process.env.DB_URI || 'mongodb://localhost:27017/punjabcommute';
 
     // Connect to MongoDB using Mongoose
-    await mongoose.connect(dbURI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
+    await mongoose.connect(dbURI);
 
     console.log('MongoDB connected successfully');
   } catch (err) {
