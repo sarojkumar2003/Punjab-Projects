@@ -1,46 +1,61 @@
-// Importing required dependencies
+// src/app.js
 const express = require('express');
 const cors = require('cors');
-const bodyParser = require('body-parser');
-const path = require('path');
 const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
 
-// Import the database connection function
 const connectDB = require('./config/db');
 
-// Import routes
 const busRoutes = require('./routes/busRoutes');
 const routeRoutes = require('./routes/routeRoutes');
 const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
-const adminUserRoutes = require('./routes/adminUserRoutes'); 
+const adminUserRoutes = require('./routes/adminUserRoutes');
 const driverRoutes = require('./routes/driverRoutes');
 
-
-
-// Initialize the Express app
 const app = express();
 
-// Middleware to handle CORS (Cross-Origin Resource Sharing)
-app.use(
-  cors({
-    // origin: 'http://localhost:5173', // your React app URL
-    origin: 'https://punjab-admin.onrender.com', 
-    credentials: true,               // allow cookies & credentials
-  })
-);
+// If behind a proxy (Render etc.) so secure cookies work
+app.set('trust proxy', 1);
 
-// Middleware for parsing incoming request bodies
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
-
-// Middleware for added security
+// Security
 app.use(helmet());
-// Middleware to parse cookies
-app.use(cookieParser()); 
 
-// Use routes for the API endpoints
+// Body parsing
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Cookie parser
+app.use(cookieParser());
+
+// === CORS (hard-coded origins, no env var) ===
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://punjab-admin.onrender.com',
+  'https://punjab-commute.onrender.com'
+];
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+
+  // Allow non-browser tools (curl/postman)
+  if (!origin) {
+    return cors({ origin: true, credentials: true })(req, res, next);
+  }
+
+  // If origin is allowed, apply CORS with that origin
+  if (allowedOrigins.includes(origin)) {
+    return cors({ origin: origin, credentials: true })(req, res, next);
+  }
+
+  // If not allowed, respond with 403 for clarity
+  res.status(403).json({ message: `CORS policy: origin ${origin} not allowed` });
+});
+
+// Ensure preflight requests are handled
+app.options('*', cors());
+
+// === Routes (after CORS) ===
 app.use('/api/bus', busRoutes);
 app.use('/api/routes', routeRoutes);
 app.use('/api/auth', authRoutes);
@@ -48,30 +63,26 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/admin/users', adminUserRoutes);
 app.use('/api/drivers', driverRoutes);
 
-
-
-// Connect to the database
+// Connect DB
 connectDB();
 
-// Set up a default route for testing
+// Health / root
 app.get('/', (req, res) => {
   res.send('Welcome to Punjab Commute Backend');
 });
 
-// 404 handler for non-existent routes
+// 404 handler
 app.use((req, res, next) => {
-  const error = new Error('Not Found');
-  error.status = 404;
-  next(error);
+  res.status(404).json({ message: 'Not Found' });
 });
 
-// Error handler middleware
+// Error handler (hide stack in production)
 app.use((err, req, res, next) => {
+  console.error(err);
   res.status(err.status || 500).json({
-    message: err.message,
-    error: err.stack,
+    message: err.message || 'Internal Server Error',
+    ...(process.env.NODE_ENV === 'production' ? {} : { stack: err.stack })
   });
 });
 
-// Export the app to be used in `server.js`
 module.exports = app;
