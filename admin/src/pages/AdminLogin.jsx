@@ -3,7 +3,8 @@ import { Link } from "react-router-dom";
 import AdminAuthLayout from "../components/AdminAuthLayout";
 
 // FIXED: match backend route
-const API = import.meta.env.VITE_API_BASE + "/api/auth/admin/login" || "http://localhost:5000/api/auth/admin/login";
+// const API = "http://localhost:5000/api/auth/admin/login";
+const API = "https://punjab-projects.onrender.com/api/auth/admin/login";
 
 const AdminLogin = () => {
   const [email, setEmail] = useState("");

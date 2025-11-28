@@ -4,7 +4,8 @@ import { useParams, Link } from "react-router-dom";
 import AdminLayout from "../layouts/AdminLayout";
 import { MapContainer, TileLayer, Marker, Polyline, Popup } from "react-leaflet";
 
-const API_BASE =  import.meta.env.VITE_API_BASE || "http://localhost:5000";
+// const API_BASE =  "http://localhost:5000";
+const API_BASE = "https://punjab-projects.onrender.com";
 
 const RouteDetails = () => {
   const { id } = useParams();
