@@ -10,9 +10,8 @@ import {
   useMap,
 } from "react-leaflet";
 
-// const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
-const API_BASE = 'https://punjab-projects.onrender.com';
-
+// You can later switch to env: import.meta.env.VITE_API_BASE || "http://localhost:5000"
+const API_BASE = "https://punjab-projects.onrender.com";
 
 // Utility: convert timestamp to "time ago"
 const timeAgo = (dateStr) => {
@@ -54,7 +53,7 @@ const AdminDashboard = () => {
     userCount: 0,
   });
 
-  // NEW: which route is selected (via Live Route cards)
+  // which route is selected (via Live Route cards)
   const [selectedRouteId, setSelectedRouteId] = useState(null);
 
   // ------------------------------------------------------------------------
@@ -67,67 +66,74 @@ const AdminDashboard = () => {
 
       const token = localStorage.getItem("token");
 
-      // buses + routes are required
-      const [busRes, routeRes] = await Promise.all([
-        fetch(`${API_BASE}/api/bus`),
-        fetch(`${API_BASE}/api/routes`),
-      ]);
+      // --- BUSES ---
+      const busRes = await fetch(`${API_BASE}/api/bus`, {
+        credentials: "include",
+      });
+      if (!busRes.ok) {
+        console.error("Bus fetch failed:", busRes.status, busRes.url);
+        throw new Error(
+          `Failed to fetch buses (${busRes.status}) from ${busRes.url}`
+        );
+      }
+      const busData = await busRes.json();
 
-      const [busData, routeData] = await Promise.all([
-        busRes.json(),
-        routeRes.json(),
-      ]);
-
-      if (!busRes.ok) throw new Error(busData.message || "Failed to fetch buses");
-      if (!routeRes.ok)
-        throw new Error(routeData.message || "Failed to fetch routes");
+      // --- ROUTES ---
+      const routeRes = await fetch(`${API_BASE}/api/routes`, {
+        credentials: "include",
+      });
+      if (!routeRes.ok) {
+        console.error("Route fetch failed:", routeRes.status, routeRes.url);
+        throw new Error(
+          `Failed to fetch routes (${routeRes.status}) from ${routeRes.url}`
+        );
+      }
+      const routeData = await routeRes.json();
 
       const allBuses = Array.isArray(busData) ? busData : [];
       const allRoutes = Array.isArray(routeData) ? routeData : [];
 
-      // Drivers are OPTIONAL (dashboard should not break if endpoint missing)
+      // --- DRIVERS (optional) ---
       let allDrivers = [];
       try {
         const driverRes = await fetch(`${API_BASE}/api/drivers`, {
           headers: {
             Authorization: token ? `Bearer ${token}` : "",
           },
+          credentials: "include",
         });
-        if (driverRes.ok) {
+        if (!driverRes.ok) {
+          console.warn(
+            "Driver fetch non-200 (optional):",
+            driverRes.status,
+            driverRes.url
+          );
+        } else {
           const driverData = await driverRes.json();
           if (Array.isArray(driverData)) {
             allDrivers = driverData;
           }
         }
       } catch (err) {
-        console.warn("Driver fetch failed (optional) :", err);
+        console.warn("Driver fetch failed (optional):", err);
       }
 
-      // Count buses
-      const totalBuses = allBuses.length;
-      const delayedBuses = allBuses.filter(
-        (b) => (b.status || "").toLowerCase() === "delayed"
-      ).length;
-      const activeBuses = allBuses.filter((b) => {
-        const s = (b.status || "").toLowerCase();
-        return ["running", "on time", "active"].includes(s);
-      }).length;
-
-      // Count routes
-      const totalRoutes = allRoutes.length;
-
-      // Count drivers
-      const driverCount = allDrivers.length;
-
-      // Users are OPTIONAL too
+      // --- USERS (optional) ---
       let userCount = 0;
       try {
         const userRes = await fetch(`${API_BASE}/api/admin/users`, {
           headers: {
             Authorization: token ? `Bearer ${token}` : "",
           },
+          credentials: "include",
         });
-        if (userRes.ok) {
+        if (!userRes.ok) {
+          console.warn(
+            "User fetch non-200 (optional):",
+            userRes.status,
+            userRes.url
+          );
+        } else {
           const userData = await userRes.json();
           if (Array.isArray(userData)) {
             userCount = userData.length;
@@ -136,6 +142,18 @@ const AdminDashboard = () => {
       } catch (err) {
         console.warn("User fetch failed (optional):", err);
       }
+
+      // Stats
+      const totalBuses = allBuses.length;
+      const delayedBuses = allBuses.filter(
+        (b) => (b.status || "").toLowerCase() === "delayed"
+      ).length;
+      const activeBuses = allBuses.filter((b) => {
+        const s = (b.status || "").toLowerCase();
+        return ["running", "on time", "active"].includes(s);
+      }).length;
+      const totalRoutes = allRoutes.length;
+      const driverCount = allDrivers.length;
 
       setStats({
         totalBuses,
@@ -432,6 +450,11 @@ const AdminDashboard = () => {
                   {loading ? "Syncing data..." : hasAnyData ? "Live" : "Waiting for data"}
                 </span>
               </p>
+              {errorMsg && (
+                <p className="text-[11px] text-rose-200 bg-rose-500/20 px-2 py-1 rounded-md mt-1">
+                  {errorMsg}
+                </p>
+              )}
             </div>
           </div>
           <div className="pointer-events-none absolute -right-10 -bottom-10 h-40 w-40 rounded-full bg-white/10 blur-3xl" />
@@ -604,7 +627,7 @@ const AdminDashboard = () => {
                 {driverSummary.map((d, i) => (
                   <li
                     key={i}
-                    className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2"
+                    className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2"
                   >
                     <div className="flex justify-between">
                       <span className="font-semibold text-slate-100">
@@ -692,7 +715,7 @@ const AdminDashboard = () => {
                 {recentActivity.map((a, i) => (
                   <li
                     key={i}
-                    className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2"
+                    className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2"
                   >
                     <div>{a.text}</div>
                     <div className="text-[11px] text-slate-500">
