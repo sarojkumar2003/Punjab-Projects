@@ -31,7 +31,8 @@ app.use(cookieParser());
 // === CORS (hard-coded origins, no env var) ===
 const allowedOrigins = [
   // 'http://localhost:5173',
-  'https://punjab-projects.onrender.com',
+  // 'https://punjab-projects.onrender.com',
+  'https://punjab-projects-admin.onrender.com'
 ];
 
 app.use((req, res, next) => {
