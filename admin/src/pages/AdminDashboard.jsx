@@ -10,9 +10,8 @@ import {
   useMap,
 } from "react-leaflet";
 
-// const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
-const API_BASE = "https://punjab-projects.onrender.com";
-
+// Prefer env, fall back to your deployed backend
+const API_BASE ="https://punjab-projects.onrender.com";
 
 // Utility: convert timestamp to "time ago"
 const timeAgo = (dateStr) => {
@@ -54,7 +53,7 @@ const AdminDashboard = () => {
     userCount: 0,
   });
 
-  // NEW: which route is selected (via Live Route cards)
+  // which route is selected (via Live Route cards)
   const [selectedRouteId, setSelectedRouteId] = useState(null);
 
   // ------------------------------------------------------------------------
@@ -69,14 +68,27 @@ const AdminDashboard = () => {
 
       // buses + routes are required
       const [busRes, routeRes] = await Promise.all([
-        fetch(`${API_BASE}/api/bus`),
-        fetch(`${API_BASE}/api/routes`),
+        fetch(`${API_BASE}/api/bus`, {
+          credentials: "include",
+        }),
+        fetch(`${API_BASE}/api/routes`, {
+          credentials: "include",
+        }),
       ]);
 
-      const [busData, routeData] = await Promise.all([
-        busRes.json(),
-        routeRes.json(),
-      ]);
+      let busData;
+      let routeData;
+
+      try {
+        busData = await busRes.json();
+      } catch {
+        busData = [];
+      }
+      try {
+        routeData = await routeRes.json();
+      } catch {
+        routeData = [];
+      }
 
       if (!busRes.ok) throw new Error(busData.message || "Failed to fetch buses");
       if (!routeRes.ok)
@@ -92,6 +104,7 @@ const AdminDashboard = () => {
           headers: {
             Authorization: token ? `Bearer ${token}` : "",
           },
+          credentials: "include",
         });
         if (driverRes.ok) {
           const driverData = await driverRes.json();
@@ -100,7 +113,7 @@ const AdminDashboard = () => {
           }
         }
       } catch (err) {
-        console.warn("Driver fetch failed (optional) :", err);
+        console.warn("Driver fetch failed (optional):", err);
       }
 
       // Count buses
@@ -126,6 +139,7 @@ const AdminDashboard = () => {
           headers: {
             Authorization: token ? `Bearer ${token}` : "",
           },
+          credentials: "include",
         });
         if (userRes.ok) {
           const userData = await userRes.json();
@@ -248,7 +262,6 @@ const AdminDashboard = () => {
 
   const selectedRouteCenter = useMemo(() => {
     if (selectedRoute?.stops?.length) {
-      // average of stops
       const coords = selectedRoute.stops
         .map((s) => s.location?.coordinates)
         .filter((c) => Array.isArray(c) && c.length === 2);
@@ -373,7 +386,7 @@ const AdminDashboard = () => {
   const hasAnyData = buses.length > 0 || routes.length > 0;
 
   // ------------------------------------------------------------------------
-  // LIVE BUS UPDATE PER ROUTE – NOW FROM ALL ROUTES
+  // LIVE BUS UPDATE PER ROUTE – ALL ROUTES
   // ------------------------------------------------------------------------
   const liveRouteBusData = useMemo(
     () =>
@@ -432,6 +445,11 @@ const AdminDashboard = () => {
                   {loading ? "Syncing data..." : hasAnyData ? "Live" : "Waiting for data"}
                 </span>
               </p>
+              {errorMsg && (
+                <p className="text-[11px] text-rose-200 bg-rose-500/20 px-2 py-1 rounded-md mt-1">
+                  {errorMsg}
+                </p>
+              )}
             </div>
           </div>
           <div className="pointer-events-none absolute -right-10 -bottom-10 h-40 w-40 rounded-full bg-white/10 blur-3xl" />
@@ -775,8 +793,7 @@ const AdminDashboard = () => {
                               className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] ${
                                 (b.status || "").toLowerCase() === "delayed"
                                   ? "bg-amber-500/15 text-amber-200 border border-amber-500/50"
-                                  : (b.status || "").toLowerCase() ===
-                                    "inactive"
+                                  : (b.status || "").toLowerCase() === "inactive"
                                   ? "bg-slate-700/40 text-slate-200 border border-slate-600/60"
                                   : "bg-emerald-500/15 text-emerald-200 border border-emerald-500/50"
                               }`}
