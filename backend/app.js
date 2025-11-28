@@ -32,7 +32,7 @@ app.use(cookieParser());
 const allowedOrigins = [
   // 'http://localhost:5173',
   // 'https://punjab-projects.onrender.com',
-  'https://punjab-projects.onrender.com'
+  'https://punjab-projects-admin.onrender.com'
 ];
 
 app.use((req, res, next) => {
