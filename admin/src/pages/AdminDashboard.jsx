@@ -11,7 +11,7 @@ import {
 } from "react-leaflet";
 
 // You can later switch to env: import.meta.env.VITE_API_BASE || "http://localhost:5000"
-const API_BASE = "https://punjab-projects.onrender.com";
+const API_BASE = import.meta.env.VITE_API_BASE;
 
 // Utility: convert timestamp to "time ago"
 const timeAgo = (dateStr) => {

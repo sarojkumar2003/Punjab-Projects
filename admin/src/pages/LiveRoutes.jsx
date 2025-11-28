@@ -11,7 +11,7 @@ import {
 } from "react-leaflet";
 
 // const API_BASE = "http://localhost:5000";
-const API_BASE = "https://punjab-projects.onrender.com";
+const API_BASE = import.meta.env.VITE_API_BASE;
 
 // Small helper to move map center when a route is selected
 const RecenterMap = ({ center }) => {

@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import AdminLayout from "../layouts/AdminLayout";
 
 // const API_BASE = "http://localhost:5000";
-const API_BASE = "https://punjab-projects.onrender.com";
+const API_BASE = import.meta.env.VITE_API_BASE;
 
 const AdminDrivers = () => {
   const [drivers, setDrivers] = useState([]);

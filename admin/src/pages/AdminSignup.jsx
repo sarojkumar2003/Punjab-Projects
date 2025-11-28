@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import AdminAuthLayout from "../components/AdminAuthLayout";
 
 // Use env-based API base (works for localhost + production)
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
+const API_BASE = import.meta.env.VITE_API_BASE;
 const API = `${API_BASE}/api/auth/admin/register`;
 
 const AdminSignup = () => {
