@@ -32,28 +32,24 @@ app.use(cookieParser());
 const allowedOrigins = [
   'http://localhost:5173',
   'https://punjab-admin.onrender.com',
-  
 ];
 
 app.use((req, res, next) => {
   const origin = req.headers.origin;
 
-  // Allow non-browser tools (curl/postman)
+  // Allow non-browser tools (curl/postman) that don't send Origin
   if (!origin) {
     return cors({ origin: true, credentials: true })(req, res, next);
   }
 
   // If origin is allowed, apply CORS with that origin
   if (allowedOrigins.includes(origin)) {
-    return cors({ origin: origin, credentials: true })(req, res, next);
+    return cors({ origin, credentials: true })(req, res, next);
   }
 
   // If not allowed, respond with 403 for clarity
   res.status(403).json({ message: `CORS policy: origin ${origin} not allowed` });
 });
-
-// Ensure preflight requests are handled
-app.options('*', cors());
 
 // === Routes (after CORS) ===
 app.use('/api/bus', busRoutes);
