@@ -1,20 +1,21 @@
+// src/pages/AdminLogin.jsx
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import AdminAuthLayout from "../components/AdminAuthLayout";
 
-// FIXED: match backend route
-// const API = "http://localhost:5000/api/auth/admin/login";
-const API = `${import.meta.env.VITE_API_BASE}/api/auth/admin/login`;
+// Use ONLY local backend
+const API_BASE = "http://localhost:5000";
+const LOGIN_ENDPOINT = `${API_BASE}/api/auth/admin/login`;
 
 const AdminLogin = () => {
   const [email, setEmail] = useState("");
   const [adminKey, setAdminKey] = useState("");
   const [password, setPassword] = useState("");
   const [msg, setMsg] = useState("");
-  const [type, setType] = useState("error");
+  const [type, setType] = useState("error"); // "error" | "success"
   const [loading, setLoading] = useState(false);
 
-  // Auto-hide message
+  // Auto-hide toast
   useEffect(() => {
     if (!msg) return;
     const t = setTimeout(() => setMsg(""), 4000);
@@ -27,31 +28,35 @@ const AdminLogin = () => {
     setMsg("");
 
     try {
-      const res = await fetch(API, {
+      const res = await fetch(LOGIN_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include", // keep this, since backend uses cookies
         body: JSON.stringify({ email, password, adminKey }),
       });
 
-      const data = await res.json();
-      console.log("Admin login response:", res.status, data);
+      const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        throw new Error(data.message || "Login failed");
+        const message =
+          data?.message ||
+          (res.status === 401
+            ? "Invalid email, password, or admin key"
+            : "Login failed. Please try again.");
+        throw new Error(message);
       }
 
       if (data.token) localStorage.setItem("token", data.token);
       if (data.role) localStorage.setItem("role", data.role);
 
       setType("success");
-      setMsg("Admin login successful. Redirecting to dashboard…");
+      setMsg("Login successful. Redirecting…");
+
       setTimeout(() => {
         window.location.href = "/admin/dashboard";
-      }, 900);
+      }, 800);
     } catch (err) {
       setType("error");
-      setMsg(err.message || "Something went wrong while logging in");
+      setMsg(err.message || "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -59,7 +64,7 @@ const AdminLogin = () => {
 
   return (
     <>
-      {/* Toast */}
+      {/* Floating toast */}
       {msg && (
         <div className="fixed top-4 right-4 z-50">
           <div
@@ -78,6 +83,7 @@ const AdminLogin = () => {
         title="Admin Sign In"
         description="Use your official admin credentials and secret key to access the control panel."
       >
+        {/* Inline message in card */}
         {msg && (
           <div
             className={`mb-4 text-sm rounded-xl px-3 py-2 border ${
@@ -120,14 +126,12 @@ const AdminLogin = () => {
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-sm font-medium text-slate-200">
-                Password
-              </label>
-            </div>
+            <label className="block text-sm font-medium text-slate-200">
+              Password
+            </label>
             <input
               type="password"
-              className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900/70 px-4 py-2.5 text-sm text-slate-50 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-400 transition"
+              className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-900/70 px-4 py-2.5 text-sm text-slate-50 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-400 transition"
               placeholder="••••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}

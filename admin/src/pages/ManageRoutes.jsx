@@ -3,8 +3,8 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import AdminLayout from "../layouts/AdminLayout";
 
-// const API_BASE = "http://localhost:5000";
-const API_BASE = import.meta.env.VITE_API_BASE;
+// ✅ Use ONLY local backend
+const API_BASE = "http://localhost:5000";
 
 const ManageRoutes = () => {
   const [routes, setRoutes] = useState([]);
@@ -320,7 +320,8 @@ const ManageRoutes = () => {
                               {s.location &&
                                 Array.isArray(s.location.coordinates) && (
                                   <span className="text-slate-500 ml-1">
-                                    · [{s.location.coordinates[0].toFixed(4)},{" "}
+                                    · [
+                                    {s.location.coordinates[0].toFixed(4)},{" "}
                                     {s.location.coordinates[1].toFixed(4)}]
                                   </span>
                                 )}

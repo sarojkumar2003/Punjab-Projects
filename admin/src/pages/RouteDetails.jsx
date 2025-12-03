@@ -4,8 +4,8 @@ import { useParams, Link } from "react-router-dom";
 import AdminLayout from "../layouts/AdminLayout";
 import { MapContainer, TileLayer, Marker, Polyline, Popup } from "react-leaflet";
 
-// const API_BASE =  "http://localhost:5000";
-const API_BASE = import.meta.env.VITE_API_BASE;
+// ✅ Use ONLY local backend while developing
+const API_BASE = "http://localhost:5000";
 
 const RouteDetails = () => {
   const { id } = useParams();
@@ -35,6 +35,7 @@ const RouteDetails = () => {
         throw new Error(busData.message || "Failed to fetch buses");
 
       setRoute(routeData);
+
       const allBuses = Array.isArray(busData) ? busData : [];
       const related = allBuses.filter((b) => {
         const rid = b.route?._id || b.route;
@@ -60,7 +61,7 @@ const RouteDetails = () => {
       .map((s) => s.location?.coordinates)
       .filter((c) => Array.isArray(c) && c.length === 2);
 
-    if (coords.length === 0) return [31.5, 75.0]; // fallback
+    if (coords.length === 0) return [31.5, 75.0]; // fallback (Punjab-ish)
 
     const avgLng = coords.reduce((sum, c) => sum + c[0], 0) / coords.length;
     const avgLat = coords.reduce((sum, c) => sum + c[1], 0) / coords.length;
@@ -187,9 +188,7 @@ const RouteDetails = () => {
                   <ol className="space-y-2 text-xs">
                     {stops
                       .slice()
-                      .sort(
-                        (a, b) => (a.sequence ?? 0) - (b.sequence ?? 0)
-                      )
+                      .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0))
                       .map((s, idx) => (
                         <li
                           key={idx}

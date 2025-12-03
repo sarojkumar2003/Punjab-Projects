@@ -2,8 +2,8 @@
 import React, { useEffect, useState, useMemo } from "react";
 import AdminLayout from "../layouts/AdminLayout";
 
-// const API_BASE = "http://localhost:5000";
-const API_BASE = import.meta.env.VITE_API_BASE;
+// Use ONLY local backend
+const API_BASE = "http://localhost:5000";
 
 const ManageBuses = () => {
   const [buses, setBuses] = useState([]);
@@ -437,7 +437,9 @@ const ManageBuses = () => {
                         )}
                       </td>
                       <td className="py-2 pr-3 text-slate-400">
-                        {b.lastUpdated ? new Date(b.lastUpdated).toLocaleString() : "—"}
+                        {b.lastUpdated
+                          ? new Date(b.lastUpdated).toLocaleString()
+                          : "—"}
                       </td>
                       <td className="py-2 pr-3 text-right space-x-2">
                         <button
@@ -478,7 +480,8 @@ const ManageBuses = () => {
           </div>
           {!selectedBus ? (
             <p className="text-xs text-slate-500">
-              Select a bus from the table above to update its location and status.
+              Select a bus from the table above to update its location and
+              status.
             </p>
           ) : (
             <form
@@ -520,11 +523,13 @@ const ManageBuses = () => {
                 value={editStatus}
                 onChange={(e) => setEditStatus(e.target.value)}
               >
-                {["On Time", "Running", "Delayed", "Arrived", "Inactive"].map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
+                {["On Time", "Running", "Delayed", "Arrived", "Inactive"].map(
+                  (s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  )
+                )}
               </select>
               <button
                 type="submit"

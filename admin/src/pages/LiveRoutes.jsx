@@ -10,17 +10,26 @@ import {
   useMap,
 } from "react-leaflet";
 
-// const API_BASE = "http://localhost:5000";
-const API_BASE = import.meta.env.VITE_API_BASE;
+// Use ONLY local backend
+const API_BASE = "http://localhost:5000";
 
-// Small helper to move map center when a route is selected
-const RecenterMap = ({ center }) => {
+// Helper to move/fit map when route is selected
+const RecenterMap = ({ bounds, center }) => {
   const map = useMap();
+
   useEffect(() => {
+    // If we have a route polyline, fit to it
+    if (bounds && Array.isArray(bounds) && bounds.length >= 2) {
+      map.fitBounds(bounds, { padding: [40, 40] });
+      return;
+    }
+
+    // Fallback: just center the map
     if (center && Array.isArray(center) && center.length === 2) {
       map.setView(center, 13);
     }
-  }, [center, map]);
+  }, [bounds, center, map]);
+
   return null;
 };
 
@@ -59,7 +68,8 @@ const LiveRoutes = () => {
         routeRes.json(),
       ]);
 
-      if (!busRes.ok) throw new Error(busData.message || "Failed to fetch buses");
+      if (!busRes.ok)
+        throw new Error(busData.message || "Failed to fetch buses");
       if (!routeRes.ok)
         throw new Error(routeData.message || "Failed to fetch routes");
 
@@ -79,16 +89,18 @@ const LiveRoutes = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Default map center from buses (average of all live buses)
   const defaultCenter = useMemo(() => {
     const coords = buses
       .map((b) => b.currentLocation?.coordinates)
       .filter((c) => Array.isArray(c) && c.length === 2);
-    if (!coords.length) return [31.5, 75.0];
+    if (!coords.length) return [31.5, 75.0]; // fallback
     const avgLng = coords.reduce((s, c) => s + c[0], 0) / coords.length;
     const avgLat = coords.reduce((s, c) => s + c[1], 0) / coords.length;
     return [avgLat, avgLng];
   }, [buses]);
 
+  // Build polyline points from route stops
   const routeLines = useMemo(
     () =>
       routes.map((route) => ({
@@ -99,7 +111,18 @@ const LiveRoutes = () => {
             ?.map((s) => {
               const coords = s.location?.coordinates;
               if (!coords || coords.length !== 2) return null;
+
+              // Assuming GeoJSON [lng, lat] in DB
               const [lng, lat] = coords;
+              if (
+                typeof lat !== "number" ||
+                typeof lng !== "number" ||
+                Number.isNaN(lat) ||
+                Number.isNaN(lng)
+              ) {
+                return null;
+              }
+              // Leaflet expects [lat, lng]
               return [lat, lng];
             })
             .filter(Boolean) || [],
@@ -112,7 +135,9 @@ const LiveRoutes = () => {
     [routes, selectedRouteId]
   );
 
+  // Center for selected route (average of its stops or its buses)
   const selectedRouteCenter = useMemo(() => {
+    // 1) from route stops
     if (selectedRoute?.stops?.length) {
       const coords = selectedRoute.stops
         .map((s) => s.location?.coordinates)
@@ -123,7 +148,7 @@ const LiveRoutes = () => {
       return [avgLat, avgLng];
     }
 
-    // fallback: center on buses of that route
+    // 2) fallback: center on buses of that route
     if (selectedRouteId) {
       const onRoute = buses.filter((b) => {
         if (b.route && typeof b.route === "object" && b.route._id) {
@@ -145,6 +170,12 @@ const LiveRoutes = () => {
   }, [selectedRoute, selectedRouteId, buses]);
 
   const mapCenter = selectedRouteCenter || defaultCenter;
+
+  // Selected route polyline (for fitBounds)
+  const selectedRouteLine = useMemo(
+    () => routeLines.find((r) => r.id === selectedRouteId) || null,
+    [routeLines, selectedRouteId]
+  );
 
   // Route → buses map (all routes, even if 0 buses)
   const liveRouteBusData = useMemo(
@@ -218,22 +249,60 @@ const LiveRoutes = () => {
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
 
-                {selectedRouteCenter && <RecenterMap center={selectedRouteCenter} />}
+                {/* Recenter/fit on selected route or center fallback */}
+                <RecenterMap
+                  bounds={selectedRouteLine?.points}
+                  center={mapCenter}
+                />
 
-                {/* Route lines */}
-                {routeLines.map((r) =>
-                  r.points.length > 1 ? (
-                    <Polyline
-                      key={r.id}
-                      positions={r.points}
-                      pathOptions={
-                        r.id === selectedRouteId
-                          ? { color: "#22c55e", weight: 5 }
-                          : { color: "#64748b", weight: 3 }
-                      }
-                    />
-                  ) : null
-                )}
+                {/* Route lines + start/end markers */}
+                {routeLines.map((r) => {
+                  if (!r.points.length) return null;
+
+                  const isSelected = r.id === selectedRouteId;
+                  const start = r.points[0];
+                  const end = r.points[r.points.length - 1];
+
+                  return (
+                    <React.Fragment key={r.id}>
+                      {r.points.length > 1 && (
+                        <Polyline
+                          positions={r.points}
+                          pathOptions={{
+                            color: isSelected ? "#22c55e" : "#64748b",
+                            weight: isSelected ? 5 : 3,
+                            opacity: isSelected ? 0.9 : 0.45,
+                            dashArray: isSelected ? null : "4 8",
+                          }}
+                        />
+                      )}
+
+                      {/* Start stop marker */}
+                      <Marker position={start}>
+                        <Popup>
+                          <div className="text-xs">
+                            <strong>{r.route.routeName}</strong>
+                            <br />
+                            Start stop
+                          </div>
+                        </Popup>
+                      </Marker>
+
+                      {/* End stop marker (if different from start) */}
+                      {r.points.length > 1 && (
+                        <Marker position={end}>
+                          <Popup>
+                            <div className="text-xs">
+                              <strong>{r.route.routeName}</strong>
+                              <br />
+                              Last stop
+                            </div>
+                          </Popup>
+                        </Marker>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
 
                 {/* Bus markers */}
                 {buses.map((b) => {
@@ -281,8 +350,8 @@ const LiveRoutes = () => {
 
             {routes.length === 0 ? (
               <p className="text-xs text-slate-500">
-                No routes created yet. Go to <b>Admin &gt; Routes</b> to add a new
-                route with stops.
+                No routes created yet. Go to <b>Admin &gt; Routes</b> to add a
+                new route with stops.
               </p>
             ) : (
               <div className="space-y-2 max-h-80 overflow-auto pr-1">

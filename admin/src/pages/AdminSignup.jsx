@@ -1,9 +1,10 @@
+// src/pages/AdminSignup.jsx
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import AdminAuthLayout from "../components/AdminAuthLayout";
 
-// Use env-based API base (works for localhost + production)
-const API_BASE = import.meta.env.VITE_API_BASE;
+// Use ONLY local backend
+const API_BASE = "http://localhost:5000";
 const API = `${API_BASE}/api/auth/admin/register`;
 
 const AdminSignup = () => {
@@ -12,7 +13,7 @@ const AdminSignup = () => {
   const [adminKey, setAdminKey] = useState("");
   const [password, setPassword] = useState("");
   const [msg, setMsg] = useState("");
-  const [type, setType] = useState("error");
+  const [type, setType] = useState("error"); // "error" | "success"
   const [loading, setLoading] = useState(false);
 
   // Auto-hide message after a few seconds
@@ -32,25 +33,20 @@ const AdminSignup = () => {
         name: name.trim(),
         email: email.trim(),
         adminKey: adminKey.trim(),
-        password, // let backend handle password rules
+        password,
       };
 
       const res = await fetch(API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include", // harmless if backend doesn't set cookies
+        // no credentials needed if not using cookies
         body: JSON.stringify(payload),
       });
 
-      let data;
-      try {
-        data = await res.json();
-      } catch {
-        data = {};
-      }
+      const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        throw new Error(data.message || "Signup failed");
+        throw new Error(data.message || "Signup failed. Please try again.");
       }
 
       setType("success");
@@ -58,10 +54,10 @@ const AdminSignup = () => {
 
       setTimeout(() => {
         window.location.href = "/admin/login";
-      }, 900);
+      }, 800);
     } catch (err) {
       setType("error");
-      setMsg(err.message || "Something went wrong while creating admin");
+      setMsg(err.message || "Something went wrong while creating admin.");
     } finally {
       setLoading(false);
     }

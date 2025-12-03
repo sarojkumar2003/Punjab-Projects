@@ -2,8 +2,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import AdminLayout from "../layouts/AdminLayout";
 
-// const API_BASE = "http://localhost:5000";
-const API_BASE = import.meta.env.VITE_API_BASE;
+// Use ONLY local backend
+const API_BASE = "http://localhost:5000";
 
 const AdminDrivers = () => {
   const [drivers, setDrivers] = useState([]);
@@ -20,6 +20,7 @@ const AdminDrivers = () => {
     isActive: true,
   });
 
+  // Read token once (page load)
   const token = useMemo(() => localStorage.getItem("token"), []);
 
   const showMessage = (text, type = "info") => {
@@ -44,7 +45,7 @@ const AdminDrivers = () => {
 
       const [driverRes, busRes] = await Promise.all([
         fetch(`${API_BASE}/api/drivers`, {
-          headers: { Authorization: token ? `Bearer ${token}` : "" },
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
         }),
         fetch(`${API_BASE}/api/bus`),
       ]);
@@ -155,7 +156,7 @@ const AdminDrivers = () => {
       setSavingId(id);
       const res = await fetch(`${API_BASE}/api/drivers/${id}`, {
         method: "DELETE",
-        headers: { Authorization: token ? `Bearer ${token}` : "" },
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
 
       const data = await res.json();
@@ -180,7 +181,8 @@ const AdminDrivers = () => {
               Driver Management
             </h1>
             <p className="mt-1 text-sm text-slate-400">
-              Store driver information, assign them to buses and manage their status.
+              Store driver information, assign them to buses and manage their
+              status.
             </p>
           </div>
         </div>

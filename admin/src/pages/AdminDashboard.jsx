@@ -10,8 +10,37 @@ import {
   useMap,
 } from "react-leaflet";
 
-// You can later switch to env: import.meta.env.VITE_API_BASE || "http://localhost:5000"
-const API_BASE = import.meta.env.VITE_API_BASE;
+// -----------------------------------------------------------------------------
+// API BASE – LOCALHOST ONLY
+// -----------------------------------------------------------------------------
+const API_BASE = "http://localhost:5000";
+
+// Small helper for API calls with good error messages
+async function fetchJSON(url, options = {}) {
+  const res = await fetch(url, {
+    // credentials: "include", // enable only if needed
+    ...options,
+  });
+
+  let data;
+  try {
+    data = await res.json();
+  } catch (err) {
+    console.warn("[AdminDashboard] Failed to parse JSON from", url, err);
+    data = null;
+  }
+
+  if (!res.ok) {
+    const msg =
+      (data && data.message) || `Request failed (${res.status}) for ${url}`;
+    const error = new Error(msg);
+    error.status = res.status;
+    error.url = url;
+    throw error;
+  }
+
+  return data;
+}
 
 // Utility: convert timestamp to "time ago"
 const timeAgo = (dateStr) => {
@@ -26,14 +55,23 @@ const timeAgo = (dateStr) => {
   return `${days} days ago`;
 };
 
-// Small helper component to recenter map when center changes
-const RecenterMap = ({ center }) => {
+// Small helper component to recenter map / fit route bounds
+const RecenterMap = ({ bounds, center }) => {
   const map = useMap();
+
   useEffect(() => {
-    if (center && Array.isArray(center) && center.length === 2) {
-      map.setView(center, 13); // zoom 13 on selected route
+    // Prefer fitting to a route polyline if we have enough points
+    if (bounds && Array.isArray(bounds) && bounds.length >= 2) {
+      map.fitBounds(bounds, { padding: [40, 40] });
+      return;
     }
-  }, [center, map]);
+
+    // Fallback: just center map
+    if (center && Array.isArray(center) && center.length === 2) {
+      map.setView(center, 13);
+    }
+  }, [bounds, center, map]);
+
   return null;
 };
 
@@ -53,42 +91,23 @@ const AdminDashboard = () => {
     userCount: 0,
   });
 
-  // which route is selected (via Live Route cards)
   const [selectedRouteId, setSelectedRouteId] = useState(null);
 
-  // ------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   // FETCH DASHBOARD DATA
-  // ------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
       setErrorMsg("");
 
-      const token = localStorage.getItem("token");
+      console.log("[AdminDashboard] Fetching data from:", API_BASE);
 
-      // --- BUSES ---
-      const busRes = await fetch(`${API_BASE}/api/bus`, {
-        credentials: "include",
-      });
-      if (!busRes.ok) {
-        console.error("Bus fetch failed:", busRes.status, busRes.url);
-        throw new Error(
-          `Failed to fetch buses (${busRes.status}) from ${busRes.url}`
-        );
-      }
-      const busData = await busRes.json();
-
-      // --- ROUTES ---
-      const routeRes = await fetch(`${API_BASE}/api/routes`, {
-        credentials: "include",
-      });
-      if (!routeRes.ok) {
-        console.error("Route fetch failed:", routeRes.status, routeRes.url);
-        throw new Error(
-          `Failed to fetch routes (${routeRes.status}) from ${routeRes.url}`
-        );
-      }
-      const routeData = await routeRes.json();
+      // --- BUSES & ROUTES (required) ---
+      const [busData, routeData] = await Promise.all([
+        fetchJSON(`${API_BASE}/api/bus`),
+        fetchJSON(`${API_BASE}/api/routes`),
+      ]);
 
       const allBuses = Array.isArray(busData) ? busData : [];
       const allRoutes = Array.isArray(routeData) ? routeData : [];
@@ -96,54 +115,31 @@ const AdminDashboard = () => {
       // --- DRIVERS (optional) ---
       let allDrivers = [];
       try {
-        const driverRes = await fetch(`${API_BASE}/api/drivers`, {
-          headers: {
-            Authorization: token ? `Bearer ${token}` : "",
-          },
-          credentials: "include",
-        });
-        if (!driverRes.ok) {
-          console.warn(
-            "Driver fetch non-200 (optional):",
-            driverRes.status,
-            driverRes.url
-          );
-        } else {
-          const driverData = await driverRes.json();
-          if (Array.isArray(driverData)) {
-            allDrivers = driverData;
-          }
+        const driverData = await fetchJSON(`${API_BASE}/api/drivers`);
+        if (Array.isArray(driverData)) {
+          allDrivers = driverData;
         }
       } catch (err) {
-        console.warn("Driver fetch failed (optional):", err);
+        console.warn(
+          "[AdminDashboard] Driver fetch failed (optional):",
+          err.message || err
+        );
       }
 
       // --- USERS (optional) ---
       let userCount = 0;
       try {
-        const userRes = await fetch(`${API_BASE}/api/admin/users`, {
-          headers: {
-            Authorization: token ? `Bearer ${token}` : "",
-          },
-          credentials: "include",
-        });
-        if (!userRes.ok) {
-          console.warn(
-            "User fetch non-200 (optional):",
-            userRes.status,
-            userRes.url
-          );
-        } else {
-          const userData = await userRes.json();
-          if (Array.isArray(userData)) {
-            userCount = userData.length;
-          }
+        const userData = await fetchJSON(`${API_BASE}/api/admin/users`);
+        if (Array.isArray(userData)) {
+          userCount = userData.length;
         }
       } catch (err) {
-        console.warn("User fetch failed (optional):", err);
+        console.warn(
+          "[AdminDashboard] User fetch failed (optional):",
+          err.message || err
+        );
       }
 
-      // Stats
       const totalBuses = allBuses.length;
       const delayedBuses = allBuses.filter(
         (b) => (b.status || "").toLowerCase() === "delayed"
@@ -168,7 +164,7 @@ const AdminDashboard = () => {
       setRoutes(allRoutes);
       setDrivers(allDrivers);
     } catch (err) {
-      console.error("Dashboard fetch error:", err);
+      console.error("[AdminDashboard] Dashboard fetch error:", err);
       setErrorMsg(err.message || "Failed to load dashboard data");
     } finally {
       setLoading(false);
@@ -181,9 +177,9 @@ const AdminDashboard = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // ------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   // ALERT SYSTEM
-  // ------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   const alerts = useMemo(() => {
     const items = [];
     const now = Date.now();
@@ -225,15 +221,15 @@ const AdminDashboard = () => {
     return items.slice(0, 6);
   }, [buses]);
 
-  // ------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   // MAP CENTER + ROUTE POLYLINES
-  // ------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   const defaultMapCenter = useMemo(() => {
     const coords = buses
       .map((b) => b.currentLocation?.coordinates)
-      .filter((c) => Array.isArray(c));
+      .filter((c) => Array.isArray(c) && c.length === 2);
 
-    if (!coords.length) return [31.5, 75.0]; // Punjab-ish default
+    if (!coords.length) return [31.5, 75.0]; // fallback
 
     const avgLng = coords.reduce((s, c) => s + c[0], 0) / coords.length;
     const avgLat = coords.reduce((s, c) => s + c[1], 0) / coords.length;
@@ -245,12 +241,25 @@ const AdminDashboard = () => {
     () =>
       routes.map((route) => ({
         id: route._id,
+        route,
         points:
           route.stops
             ?.map((s) => {
               const coords = s.location?.coordinates;
               if (!coords || coords.length !== 2) return null;
+
+              // Assuming GeoJSON [lng, lat]
               const [lng, lat] = coords;
+              if (
+                typeof lat !== "number" ||
+                typeof lng !== "number" ||
+                Number.isNaN(lat) ||
+                Number.isNaN(lng)
+              ) {
+                return null;
+              }
+
+              // Leaflet expects [lat, lng]
               return [lat, lng];
             })
             .filter(Boolean) || [],
@@ -258,7 +267,6 @@ const AdminDashboard = () => {
     [routes]
   );
 
-  // Selected route details (for map focus)
   const selectedRoute = useMemo(
     () => routes.find((r) => r._id === selectedRouteId) || null,
     [routes, selectedRouteId]
@@ -266,7 +274,6 @@ const AdminDashboard = () => {
 
   const selectedRouteCenter = useMemo(() => {
     if (selectedRoute?.stops?.length) {
-      // average of stops
       const coords = selectedRoute.stops
         .map((s) => s.location?.coordinates)
         .filter((c) => Array.isArray(c) && c.length === 2);
@@ -276,7 +283,6 @@ const AdminDashboard = () => {
       return [avgLat, avgLng];
     }
 
-    // fallback: if route has no stops but buses are on it
     if (selectedRouteId) {
       const onRoute = buses.filter((b) => {
         if (b.route && typeof b.route === "object" && b.route._id) {
@@ -301,9 +307,11 @@ const AdminDashboard = () => {
 
   const mapCenter = selectedRouteCenter || defaultMapCenter;
 
-  // ------------------------------------------------------------------------
-  // DRIVER SUMMARY
-  // ------------------------------------------------------------------------
+  const selectedRouteLine = useMemo(
+    () => routeLines.find((r) => r.id === selectedRouteId) || null,
+    [routeLines, selectedRouteId]
+  );
+
   const driverSummary = useMemo(() => {
     if (drivers.length > 0) {
       return drivers
@@ -317,7 +325,6 @@ const AdminDashboard = () => {
         }));
     }
 
-    // fallback: infer drivers from buses if driver collection not used
     return buses
       .filter((b) => b.driverName)
       .slice(0, 5)
@@ -329,9 +336,6 @@ const AdminDashboard = () => {
       }));
   }, [drivers, buses]);
 
-  // ------------------------------------------------------------------------
-  // TOP ROUTES (Busiest + Most Delayed)
-  // ------------------------------------------------------------------------
   const routeStats = useMemo(() => {
     const map = new Map();
 
@@ -357,14 +361,13 @@ const AdminDashboard = () => {
     const arr = [...map.values()];
 
     return {
-      busiest: arr.sort((a, b) => b.busCount - a.busCount).slice(0, 3),
-      mostDelayed: arr.sort((a, b) => b.delayedCount - a.delayedCount).slice(0, 3),
+      busiest: [...arr].sort((a, b) => b.busCount - a.busCount).slice(0, 3),
+      mostDelayed: [...arr]
+        .sort((a, b) => b.delayedCount - a.delayedCount)
+        .slice(0, 3),
     };
   }, [buses]);
 
-  // ------------------------------------------------------------------------
-  // RECENT ACTIVITY
-  // ------------------------------------------------------------------------
   const recentActivity = useMemo(() => {
     const events = [];
 
@@ -390,9 +393,6 @@ const AdminDashboard = () => {
 
   const hasAnyData = buses.length > 0 || routes.length > 0;
 
-  // ------------------------------------------------------------------------
-  // LIVE BUS UPDATE PER ROUTE – NOW FROM ALL ROUTES
-  // ------------------------------------------------------------------------
   const liveRouteBusData = useMemo(
     () =>
       routes
@@ -415,9 +415,6 @@ const AdminDashboard = () => {
     [routes, buses]
   );
 
-  // ------------------------------------------------------------------------
-  // RENDER UI
-  // ------------------------------------------------------------------------
   return (
     <AdminLayout>
       <div className="flex flex-col gap-6">
@@ -447,11 +444,15 @@ const AdminDashboard = () => {
               <p className="text-[11px] text-indigo-100/80">
                 Status:{" "}
                 <span className="font-medium">
-                  {loading ? "Syncing data..." : hasAnyData ? "Live" : "Waiting for data"}
+                  {loading
+                    ? "Syncing data..."
+                    : hasAnyData
+                    ? "Live"
+                    : "Waiting for data"}
                 </span>
               </p>
               {errorMsg && (
-                <p className="text-[11px] text-rose-200 bg-rose-500/20 px-2 py-1 rounded-md mt-1">
+                <p className="text-[11px] text-rose-200 bg-rose-500/20 px-2 py-1 rounded-md mt-1 max-w-xs">
                   {errorMsg}
                 </p>
               )}
@@ -531,7 +532,7 @@ const AdminDashboard = () => {
                 Live Bus Map
               </h2>
               <span className="text-[11px] text-slate-500">
-                Data from /api/bus & /api/routes
+                Data from /api/bus &amp; /api/routes
               </span>
             </div>
             {buses.length === 0 && routes.length === 0 ? (
@@ -549,27 +550,62 @@ const AdminDashboard = () => {
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
 
-                {/* Recenter when route is selected */}
-                {selectedRouteCenter && (
-                  <RecenterMap center={selectedRouteCenter} />
-                )}
+                {/* Recenter / Fit selected route */}
+                <RecenterMap
+                  bounds={selectedRouteLine?.points}
+                  center={mapCenter}
+                />
 
-                {/* Route Polylines */}
-                {routeLines.map((r) =>
-                  r.points.length > 1 ? (
-                    <Polyline
-                      key={r.id}
-                      positions={r.points}
-                      pathOptions={
-                        r.id === selectedRouteId
-                          ? { color: "#22c55e", weight: 5 } // highlight selected
-                          : { color: "#64748b", weight: 3 }
-                      }
-                    />
-                  ) : null
-                )}
+                {/* Route lines + start/end markers */}
+                {routeLines.map((r) => {
+                  if (!r.points.length) return null;
 
-                {/* Buses */}
+                  const isSelected = r.id === selectedRouteId;
+                  const start = r.points[0];
+                  const end = r.points[r.points.length - 1];
+
+                  return (
+                    <React.Fragment key={r.id}>
+                      {r.points.length > 1 && (
+                        <Polyline
+                          positions={r.points}
+                          pathOptions={{
+                            color: isSelected ? "#22c55e" : "#64748b",
+                            weight: isSelected ? 5 : 3,
+                            opacity: isSelected ? 0.9 : 0.45,
+                            dashArray: isSelected ? null : "4 8",
+                          }}
+                        />
+                      )}
+
+                      {/* Start marker */}
+                      <Marker position={start}>
+                        <Popup>
+                          <div className="text-xs">
+                            <strong>{r.route.routeName}</strong>
+                            <br />
+                            Start stop
+                          </div>
+                        </Popup>
+                      </Marker>
+
+                      {/* End marker */}
+                      {r.points.length > 1 && (
+                        <Marker position={end}>
+                          <Popup>
+                            <div className="text-xs">
+                              <strong>{r.route.routeName}</strong>
+                              <br />
+                              Last stop
+                            </div>
+                          </Popup>
+                        </Marker>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+
+                {/* Bus markers */}
                 {buses.map((b) => {
                   const coords = b.currentLocation?.coordinates;
                   if (!Array.isArray(coords) || coords.length !== 2) return null;
@@ -610,39 +646,44 @@ const AdminDashboard = () => {
           </div>
         </div>
 
-        {/* Driver Summary + Route Performance + Recent Activity */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Drivers, Route Performance, Recent Activity */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
           {/* Driver Summary */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 flex flex-col gap-3">
-            <h2 className="text-sm font-semibold text-slate-100">
-              Driver Summary
-            </h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-slate-100">
+                Drivers &amp; Assignments
+              </h2>
+              <span className="text-[11px] text-slate-500">
+                {driverSummary.length} listed
+              </span>
+            </div>
             {driverSummary.length === 0 ? (
               <p className="text-xs text-slate-500">
-                No driver information available yet. Add drivers and assign them
-                to buses from the management panel.
+                No drivers or driver info available yet.
               </p>
             ) : (
               <ul className="space-y-2 text-xs">
                 {driverSummary.map((d, i) => (
                   <li
                     key={i}
-                    className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2"
+                    className="flex items-center justify-between rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-2"
                   >
-                    <div className="flex justify-between">
-                      <span className="font-semibold text-slate-100">
-                        {d.name}
-                      </span>
-                      <span className="text-slate-400">
-                        {d.bus === "Unassigned" ? "No bus" : `Bus ${d.bus}`}
-                      </span>
+                    <div>
+                      <p className="font-medium text-slate-100">{d.name}</p>
+                      <p className="text-[11px] text-slate-400">
+                        Bus: {d.bus} · {d.phone || "No phone"}
+                      </p>
                     </div>
-                    {d.phone && (
-                      <div className="text-slate-400">{d.phone}</div>
-                    )}
-                    <div className="text-[11px] text-slate-500">
-                      Status: {d.status || "Unknown"}
-                    </div>
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] ${
+                        (d.status || "").toLowerCase() === "idle"
+                          ? "bg-slate-700/40 text-slate-200 border border-slate-600/60"
+                          : "bg-emerald-500/15 text-emerald-200 border border-emerald-500/50"
+                      }`}
+                    >
+                      {d.status || "Unknown"}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -651,186 +692,144 @@ const AdminDashboard = () => {
 
           {/* Route Performance */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 flex flex-col gap-3">
-            <h2 className="text-sm font-semibold text-slate-100">
-              Route Performance
-            </h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-slate-100">
+                Route Performance
+              </h2>
+              <span className="text-[11px] text-slate-500">
+                Based on live buses
+              </span>
+            </div>
             {routeStats.busiest.length === 0 ? (
               <p className="text-xs text-slate-500">
-                No active routes with buses yet.
+                No route performance data yet.
               </p>
             ) : (
-              <>
+              <div className="grid grid-cols-1 gap-3 text-xs">
                 <div>
-                  <p className="text-[11px] font-semibold text-slate-400 mb-1">
+                  <p className="mb-1 text-[11px] font-semibold text-slate-300">
                     Busiest Routes
                   </p>
-                  <div className="space-y-1 text-xs">
+                  <ul className="space-y-1.5">
                     {routeStats.busiest.map((r, i) => (
-                      <div
-                        key={i}
-                        className="flex justify-between rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5"
+                      <li
+                        key={`${r.name}-busy-${i}`}
+                        className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-950/60 px-2 py-1.5"
                       >
-                        <span>{r.name}</span>
-                        <span className="text-slate-400">
+                        <span className="truncate max-w-[60%] text-slate-100">
+                          {r.name}
+                        </span>
+                        <span className="text-[11px] text-slate-300">
                           {r.busCount} bus(es)
                         </span>
-                      </div>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 </div>
-                <div className="mt-2">
-                  <p className="text-[11px] font-semibold text-slate-400 mb-1">
+                <div>
+                  <p className="mb-1 text-[11px] font-semibold text-slate-300">
                     Most Delayed Routes
                   </p>
-                  <div className="space-y-1 text-xs">
+                  <ul className="space-y-1.5">
                     {routeStats.mostDelayed.map((r, i) => (
-                      <div
-                        key={i}
-                        className="flex justify-between rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5"
+                      <li
+                        key={`${r.name}-delay-${i}`}
+                        className="flex items-center justify-between rounded-lg border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-amber-50"
                       >
-                        <span>{r.name}</span>
-                        <span className="text-amber-300">
+                        <span className="truncate max-w-[60%]">
+                          {r.name}
+                        </span>
+                        <span className="text-[11px]">
                           {r.delayedCount} delayed
                         </span>
-                      </div>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 </div>
-              </>
+              </div>
             )}
           </div>
 
-          {/* Recent Activity */}
+          {/* Recent Activity + Routes & Live Buses */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 flex flex-col gap-3">
-            <h2 className="text-sm font-semibold text-slate-100">
-              Recent Activity
-            </h2>
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="text-sm font-semibold text-slate-100">
+                Recent Activity
+              </h2>
+              <span className="text-[11px] text-slate-500">
+                {recentActivity.length} events
+              </span>
+            </div>
             {recentActivity.length === 0 ? (
               <p className="text-xs text-slate-500">
-                No recent updates. Activities will appear here as buses, routes
-                and drivers are updated.
+                No recent updates yet. Events will appear as buses and routes
+                change.
               </p>
             ) : (
-              <ul className="space-y-2 text-xs">
-                {recentActivity.map((a, i) => (
+              <ul className="space-y-1.5 text-xs max-h-40 overflow-auto pr-1">
+                {recentActivity.map((e, i) => (
                   <li
                     key={i}
-                    className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2"
+                    className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-950/60 px-2 py-1.5"
                   >
-                    <div>{a.text}</div>
-                    <div className="text-[11px] text-slate-500">
-                      {timeAgo(a.time)}
-                    </div>
+                    <span className="truncate max-w-[65%] text-slate-100">
+                      {e.text}
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      {timeAgo(e.time)}
+                    </span>
                   </li>
                 ))}
               </ul>
             )}
-          </div>
-        </div>
 
-        {/* LIVE BUS UPDATES PER ROUTE (clickable) */}
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 flex flex-col gap-3">
-          <div className="flex items-center justify-between mb-1">
-            <h2 className="text-sm font-semibold text-slate-100">
-              Live Route Bus Updates
-            </h2>
-            <span className="text-[11px] text-slate-500">
-              Click a route card to focus on map
-            </span>
-          </div>
-
-          {liveRouteBusData.length === 0 ? (
-            <p className="text-xs text-slate-500">
-              No routes available yet. When you create routes and assign buses,
-              they’ll appear here with live status.
-            </p>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-              {liveRouteBusData.map(({ route, buses: busesOnRoute }) => {
-                const isSelected = selectedRouteId === route._id;
-                return (
-                  <button
-                    key={route._id}
-                    type="button"
-                    onClick={() =>
-                      setSelectedRouteId(
-                        isSelected ? null : route._id // click again to unselect
-                      )
-                    }
-                    className={`text-left rounded-xl border px-3 py-3 text-xs transition ${
-                      isSelected
-                        ? "border-emerald-400 bg-emerald-500/10"
-                        : "border-slate-700 bg-slate-900 hover:border-slate-500"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <div>
-                        <p className="font-semibold text-slate-100">
-                          {route.routeName}
-                        </p>
-                        <p className="text-[11px] text-slate-500">
-                          {route.stops?.length || 0} stops ·{" "}
-                          {busesOnRoute.length} bus(es) live
-                        </p>
-                      </div>
-                    </div>
-
-                    <ul className="mt-2 space-y-1">
-                      {busesOnRoute.length === 0 ? (
-                        <li className="text-[11px] text-slate-500">
-                          No bus currently on this route.
-                        </li>
-                      ) : (
-                        busesOnRoute.map((b) => (
-                          <li
-                            key={b._id}
-                            className="flex items-center justify-between rounded-lg border border-slate-700/70 bg-slate-950/70 px-2 py-1"
-                          >
-                            <div>
-                              <p className="text-slate-100 text-xs">
-                                Bus {b.busNumber}
-                              </p>
-                              <p className="text-[11px] text-slate-500">
-                                Last update: {timeAgo(b.lastUpdated)}
-                              </p>
-                            </div>
-                            <span
-                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] ${
-                                (b.status || "").toLowerCase() === "delayed"
-                                  ? "bg-amber-500/15 text-amber-200 border border-amber-500/50"
-                                  : (b.status || "").toLowerCase() ===
-                                    "inactive"
-                                  ? "bg-slate-700/40 text-slate-200 border border-slate-600/60"
-                                  : "bg-emerald-500/15 text-emerald-200 border border-emerald-500/50"
-                              }`}
-                            >
-                              {b.status || "Unknown"}
-                            </span>
-                          </li>
-                        ))
-                      )}
-                    </ul>
-                  </button>
-                );
-              })}
+            <div className="mt-3 border-t border-slate-800 pt-3">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-[11px] font-semibold text-slate-300">
+                  Routes &amp; Live Buses
+                </h3>
+                <span className="text-[11px] text-slate-500">
+                  {routes.length} routes
+                </span>
+              </div>
+              {routes.length === 0 ? (
+                <p className="text-[11px] text-slate-500">
+                  No routes created yet. Go to <b>Admin &gt; Routes</b> to add
+                  a new route with stops.
+                </p>
+              ) : (
+                <div className="space-y-1.5 max-h-40 overflow-auto pr-1">
+                  {liveRouteBusData.map(({ route, buses: busesOnRoute }) => {
+                    const isSelected = selectedRouteId === route._id;
+                    return (
+                      <button
+                        key={route._id}
+                        type="button"
+                        onClick={() =>
+                          setSelectedRouteId(isSelected ? null : route._id)
+                        }
+                        className={`w-full text-left rounded-xl border px-3 py-1.5 text-[11px] transition ${
+                          isSelected
+                            ? "border-emerald-400 bg-emerald-500/10"
+                            : "border-slate-700 bg-slate-900 hover:border-slate-500"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="truncate max-w-[65%] text-slate-100">
+                            {route.routeName}
+                          </span>
+                          <span className="text-[10px] text-slate-400">
+                            {busesOnRoute.length} bus(es)
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          )}
-        </div>
-
-        {/* Empty-state hint */}
-        {!loading && !hasAnyData && (
-          <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/70 px-4 py-3 text-xs text-slate-400">
-            ℹ️ Currently there are no buses or routes in the system. Go to{" "}
-            <span className="font-semibold text-slate-200">
-              Admin &gt; Buses
-            </span>{" "}
-            and{" "}
-            <span className="font-semibold text-slate-200">
-              Admin &gt; Routes
-            </span>{" "}
-            to start adding live data.
           </div>
-        )}
+        </div>
       </div>
     </AdminLayout>
   );

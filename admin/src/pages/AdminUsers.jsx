@@ -2,14 +2,14 @@
 import React, { useEffect, useState } from "react";
 import AdminLayout from "../layouts/AdminLayout";
 
-// const API_BASE = "http://localhost:5000";
-const API_BASE = import.meta.env.VITE_API_BASE;
+// Use ONLY local backend
+const API_BASE = "http://localhost:5000";
 
 const emptyForm = {
   name: "",
   email: "",
   password: "",
-  role: "commuter", // ✅ match backend enum: 'commuter' | 'admin'
+  role: "commuter", // 'commuter' | 'admin'
   isActive: true,
 };
 
@@ -105,7 +105,6 @@ const AdminUsers = () => {
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
 
-    // If role changes away from admin, clear adminSecurityCode (no need to keep it)
     if (name === "role") {
       setForm((prev) => ({
         ...prev,
@@ -137,7 +136,6 @@ const AdminUsers = () => {
       return;
     }
 
-    // ✅ Only require adminSecurityCode when the user is admin
     if (isAdminRole && !adminSecurityCode.trim()) {
       setErrorMsg(
         "Admin security code is required when creating or updating an Admin user."
@@ -152,12 +150,10 @@ const AdminUsers = () => {
       isActive: form.isActive,
     };
 
-    // Only send password if creating OR admin typed something
     if (!editingId || form.password.trim()) {
       body.password = form.password.trim();
     }
 
-    // Only send adminSecurityCode if role is admin
     if (isAdminRole) {
       body.adminSecurityCode = adminSecurityCode.trim();
     }
@@ -215,7 +211,6 @@ const AdminUsers = () => {
 
     const body = { isActive: newStatus };
 
-    // If the target user is an admin, ask for admin security code
     if (user.role === "admin") {
       const code = window.prompt(
         `Enter admin security code to change status for Admin "${user.name}" :`
@@ -239,7 +234,6 @@ const AdminUsers = () => {
         throw new Error(data.message || "Failed to update user status");
       }
 
-      // ✅ Optimistically update local UI so badge flips immediately
       setUsers((prev) =>
         prev.map((u) =>
           u._id === user._id ? { ...u, isActive: newStatus } : u
@@ -251,8 +245,6 @@ const AdminUsers = () => {
           newStatus ? "Active" : "Disabled"
         }.`
       );
-      // If you want to be 100% synced with backend, you can still:
-      // fetchUsers();
     } catch (err) {
       console.error("Toggle status error:", err);
       setErrorMsg(err.message || "Failed to update user status");
@@ -260,7 +252,7 @@ const AdminUsers = () => {
   };
 
   // ------------------------------------------------------------------
-  // DELETE USER (still requires adminSecurityCode prompt)
+  // DELETE USER
   // ------------------------------------------------------------------
   const handleDelete = async (user) => {
     const token = localStorage.getItem("token");
@@ -308,7 +300,8 @@ const AdminUsers = () => {
             </h1>
             <p className="text-xs text-slate-400">
               Create, update and manage users. Admin users require an additional
-              security code. Click the status badge to quickly enable or disable a user.
+              security code. Click the status badge to quickly enable or disable
+              a user.
             </p>
           </div>
           <button
@@ -389,11 +382,10 @@ const AdminUsers = () => {
                           </span>
                         </td>
                         <td className="px-4 py-2">
-                          {/* 🔄 Clickable status badge */}
                           <button
                             type="button"
                             onClick={() => handleToggleStatus(u)}
-                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] transition border ${
+                            className={`inline-flex items-section rounded-full px-2 py-0.5 text-[11px] transition border ${
                               isActive
                                 ? "bg-emerald-500/10 text-emerald-200 border-emerald-500/50 hover:bg-emerald-500/20"
                                 : "bg-slate-700/40 text-slate-300 border-slate-600/60 hover:bg-slate-700/70"
@@ -438,7 +430,8 @@ const AdminUsers = () => {
                     {editingId ? "Edit User" : "Create User"}
                   </h2>
                   <p className="text-[11px] text-slate-500">
-                    Admin security code is required only when saving Admin users.
+                    Admin security code is required only when saving Admin
+                    users.
                   </p>
                 </div>
                 <button
@@ -506,8 +499,8 @@ const AdminUsers = () => {
                   </select>
                   {form.role === "admin" && (
                     <p className="mt-1 text-[10px] text-amber-300">
-                      Giving the Admin role grants full access. Make sure you trust
-                      this account.
+                      Giving the Admin role grants full access. Make sure you
+                      trust this account.
                     </p>
                   )}
                 </div>
@@ -529,7 +522,6 @@ const AdminUsers = () => {
                   </label>
                 </div>
 
-                {/* 🔐 Admin security code – only shown when role is admin */}
                 {isAdminRole && (
                   <div className="pt-2 border-t border-slate-800">
                     <label className="block mb-1 text-slate-300">
